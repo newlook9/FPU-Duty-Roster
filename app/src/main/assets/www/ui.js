@@ -1,6 +1,6 @@
 'use strict';
 /* ====== FPU Duty Roster - UI ====== */
-var tab = 'dash', openSec = '', stFilter = 'M';
+var tab = 'dash', openSec = '', stFilter = 'M', stQ = '';
 var dlgOpen = false, dlgDone = null;
 
 /* WhatsApp number is kept out of the visible UI and out of plain text */
@@ -200,10 +200,14 @@ function viewSet() {
   var list = S.staff.filter(function (s) { return s.g === stFilter; });
   var staffH = '<div class="seg"><button data-act="stf" data-v="M" class="' + (stFilter === 'M' ? 'on' : '') + '">میل (' + S.staff.filter(function (s) { return s.g === 'M'; }).length +
     ')</button><button data-act="stf" data-v="F" class="' + (stFilter === 'F' ? 'on' : '') + '">فیمیل (' + S.staff.filter(function (s) { return s.g === 'F'; }).length + ')</button></div>' +
+    '<input class="srch" id="stQ" placeholder="تلاش: نمبر یا نام" value="' + esc(stQ) + '" style="margin-top:8px">' +
     list.map(function (s) {
-      return itemRow('<span class="no">' + esc(s.no) + '</span> ' + (s.name ? esc(s.name) : '<span class="mut">(نام درج کریں)</span>'),
-        esc(s.wl) + (s.mobile ? ' · ' + esc(s.mobile) : ''), ib('st-edit', s.id, '✎') + ib('st-del', s.id, '✕', 'bad'));
-    }).join('') + '<button class="btn pri wide" data-act="st-add">+ نیا اہلکار</button>';
+      var q = (s.no + ' ' + s.name + ' ' + s.wl).toLowerCase();
+      return '<div class="stitem" data-q="' + esc(q) + '"' + (stQ && q.indexOf(stQ.toLowerCase()) < 0 ? ' style="display:none"' : '') + '>' +
+        itemRow('<span class="no">' + esc(s.no) + '</span> ' + (s.name ? esc(s.name) : '<span class="mut">(نام درج کریں)</span>'),
+          esc(s.wl) + (s.mobile ? ' · ' + esc(s.mobile) : ''), ib('st-edit', s.id, '✎') + ib('st-del', s.id, '✕', 'bad')) + '</div>';
+    }).join('') + '<button class="btn wide" data-act="st-bulk">تمام نام ایک ساتھ لکھیں</button>' +
+    '<button class="btn pri wide" data-act="st-add">+ نیا اہلکار</button>';
   /* cycles */
   var cycH = '<label class="fld"><span>سائیکل نمبر (کاما سے الگ کریں، یا رینج جیسے 1-24)</span><textarea id="cycIn" class="ltr" rows="3" style="direction:ltr;text-align:left">' +
     esc(S.cycles.slice().sort(numSort).join(', ')) + '</textarea></label><button class="btn pri wide" data-act="cy-save">محفوظ کریں</button>';
@@ -221,7 +225,7 @@ function viewSet() {
     '<div class="grid2"><button class="btn pri" data-act="bk-share">بیک اپ شیئر کریں</button><button class="btn" data-act="bk-save">فون میں محفوظ کریں</button></div>' +
     '<button class="btn wide" data-act="bk-restore">بیک اپ بحال کریں (JSON فائل)</button>' +
     '<p class="mut" style="margin:8px 0 0">نئے فون میں ایپ انسٹال کر کے یہی بٹن دبائیں اور محفوظ کی ہوئی JSON فائل چنیں۔ سارا ریکارڈ، سیٹنگز اور سگنیچر واپس آ جائیں گے۔</p>';
-  var aboutH = '<p style="margin:4px 0"><b style="font-weight:normal;font-size:19px">FPU Duty Roster</b><br><span class="mut">ورژن 1.0 · مکمل آف لائن</span></p>' + devFoot();
+  var aboutH = '<p style="margin:4px 0"><b style="font-weight:normal;font-size:19px">FPU Duty Roster</b><br><span class="mut">ورژن 2.0 · مکمل آف لائن</span></p>' + devFoot();
 
   h += sec('lab', 'رپورٹ کے عنوان', lab);
   h += sec('staff', 'اسٹاف (میل / فیمیل)', staffH);
@@ -322,6 +326,21 @@ function staffForm(id) {
         if (id) { var cur = staffById(id); for (var k in rec) cur[k] = rec[k]; }
         else { rec.id = nid('S'); S.staff.push(rec); }
         stFilter = g; closeSheet(); commit(); toast('محفوظ ہو گیا');
+      };
+    });
+}
+
+/* ---------- bulk names ---------- */
+function bulkNames() {
+  var list = S.staff.filter(function (x) { return x.g === stFilter; });
+  openSheet(stFilter === 'M' ? 'میل اسٹاف کے نام' : 'فیمیل اسٹاف کے نام',
+    list.map(function (x) {
+      return '<label class="fld"><span class="no">' + esc(x.no) + ' · ' + esc(x.wl) + '</span><input data-bn="' + esc(x.id) + '" value="' + esc(x.name) + '"></label>';
+    }).join('') + '<button class="btn pri wide" id="bnOk">محفوظ کریں</button>',
+    function (b) {
+      $('#bnOk', b).onclick = function () {
+        $$('[data-bn]', b).forEach(function (inp) { var st = staffById(inp.getAttribute('data-bn')); if (st) st.name = inp.value.trim(); });
+        closeSheet(); commit(); toast('نام محفوظ ہو گئے');
       };
     });
 }
@@ -456,6 +475,7 @@ function onAct(a, v) {
     case 'lab-reset': S.settings.labels = JSON.parse(JSON.stringify(DEF_LABELS)); commit(); toast('اصل عنوان بحال ہو گئے'); break;
     case 'stf': stFilter = v; render(); break;
     case 'st-add': staffForm(null); break;
+    case 'st-bulk': bulkNames(); break;
     case 'st-edit': staffForm(v); break;
     case 'st-del':
       var s = staffById(v), inUse = staffInCurrentRoster(v);
@@ -507,6 +527,11 @@ function initUI() {
   view.addEventListener('click', function (e) {
     var t = e.target.closest('[data-act]');
     if (t) { onAct(t.getAttribute('data-act'), t.getAttribute('data-v')); }
+  });
+  view.addEventListener('input', function (e) {
+    if (e.target.id !== 'stQ') return;
+    stQ = e.target.value.trim();
+    $$('.stitem').forEach(function (el) { el.style.display = (!stQ || el.getAttribute('data-q').indexOf(stQ.toLowerCase()) >= 0) ? '' : 'none'; });
   });
   view.addEventListener('change', function (e) {
     var t = e.target;
